@@ -27,6 +27,22 @@ async def _fetch_all(client: BaramundiClient, path: str) -> list[dict]:
     return all_items
 
 
+async def _resolve_to_guid(client: BaramundiClient, device_id: str) -> str | None:
+    """Löst Hostname oder GUID zu einer Endpoint-GUID auf. None = nicht gefunden."""
+    is_guid = bool(re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        device_id.strip(),
+    ))
+    if is_guid:
+        return device_id.strip()
+    hostname = device_id.strip().upper()
+    for path in ENDPOINT_TYPES.values():
+        for d in await _fetch_all(client, path):
+            if (d.get("hostName") or "").upper() == hostname:
+                return d["id"]
+    return None
+
+
 def register_device_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -73,19 +89,53 @@ def register_device_tools(mcp: FastMCP) -> None:
             Vollständiges Geräte-Objekt mit allen Feldern inkl. Hardware,
             OS-Version, letzter Benutzer, Gruppe, Agent-Status, etc.
         """
-        is_guid = bool(re.fullmatch(
-            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-            device_id.strip(),
-        ))
         async with BaramundiClient() as client:
-            if is_guid:
-                return await client.get(f"endpoints/v2.0/Endpoints/{device_id.strip()}")
-            hostname = device_id.strip().upper()
-            for path in ENDPOINT_TYPES.values():
-                for d in await _fetch_all(client, path):
-                    if (d.get("hostName") or "").upper() == hostname:
-                        return await client.get(f"endpoints/v2.0/Endpoints/{d['id']}")
-        return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
+            guid = await _resolve_to_guid(client, device_id)
+            if guid is None:
+                return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
+            return await client.get(f"endpoints/v2.0/Endpoints/{guid}")
+
+    @mcp.tool()
+    async def get_software_inventory(
+        device_id: str,
+        query: str = "",
+    ) -> dict:
+        """
+        Gibt die installierte Software auf einem Gerät zurück.
+        Akzeptiert Hostname (z.B. 'PCSWIT1984') oder GUID.
+
+        Args:
+            device_id: Hostname oder GUID des Geräts.
+            query: Optionaler Suchbegriff im Software-Namen (z.B. 'Chrome', 'Office').
+                   Leer = alle installierten Programme.
+
+        Returns:
+            Objekt mit 'total' und 'software' (alphabetisch sortiert).
+            Felder je Eintrag: name, version, publisher, installDate.
+        """
+        async with BaramundiClient() as client:
+            guid = await _resolve_to_guid(client, device_id)
+            if guid is None:
+                return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
+            raw = await _fetch_all(client, f"software/v2.0/WindowsEndpoints/{guid}/InstalledWindowsSoftware")
+
+        if query:
+            q = query.strip().lower()
+            raw = [s for s in raw if q in (s.get("name") or "").lower()]
+
+        software = sorted(
+            [
+                {
+                    "name": s.get("name"),
+                    "version": s.get("version"),
+                    "publisher": s.get("publisher"),
+                    "installDate": s.get("installDate"),
+                }
+                for s in raw
+            ],
+            key=lambda x: (x.get("name") or "").lower(),
+        )
+        return {"total": len(software), "software": software}
 
     @mcp.tool()
     async def search_devices(
