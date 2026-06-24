@@ -1,4 +1,5 @@
 import re
+import asyncio
 from mcp.server.fastmcp import FastMCP
 from baramundi_mcp.client import BaramundiClient
 
@@ -9,22 +10,20 @@ ENDPOINT_TYPES = {
 }
 
 async def _fetch_all(client: BaramundiClient, path: str) -> list[dict]:
-    """Holt alle Einträge einer paginierten Ressource in möglichst wenigen Requests.
-    pageSize=1000 holt bis zu 1000 Items auf einmal; bei mehr wird paginiert."""
-    all_items: list[dict] = []
-    page = 0
+    """Holt alle Seiten einer paginierten Ressource parallel (1 Request pro Seite gleichzeitig)."""
+    first = await client.get(path, params={"pageSize": 1000, "page": 0})
+    items = list(first.get("data", []))
+    total_pages = first.get("totalPages", 1)
 
-    while True:
-        result = await client.get(path, params={"pageSize": 1000, "page": page})
-        batch = result.get("data", [])
-        if not batch:
-            break
-        all_items.extend(batch)
-        if page >= result.get("totalPages", 1) - 1:
-            break
-        page += 1
+    if total_pages > 1:
+        pages = await asyncio.gather(*[
+            client.get(path, params={"pageSize": 1000, "page": p})
+            for p in range(1, total_pages)
+        ])
+        for result in pages:
+            items.extend(result.get("data", []))
 
-    return all_items
+    return items
 
 
 async def _resolve_to_guid(client: BaramundiClient, device_id: str) -> str | None:
@@ -52,7 +51,9 @@ def register_device_tools(mcp: FastMCP) -> None:
         page: int = 0,
     ) -> dict:
         """
-        Listet verwaltete Geräte/Endpoints im baramundi Management Center auf.
+        Gibt eine einzelne Seite der Geräteliste zurück — NUR für seitenweise Übersichten.
+        NICHT für Suchen verwenden! Für Suchen nach Benutzer, Name, IP oder Gruppe
+        stattdessen search_devices(query=...) nutzen — ein einziger Call, alle Geräte.
 
         Args:
             type: Gerätetyp — 'windows' (Standard), 'mac' oder 'linux'.
@@ -61,8 +62,6 @@ def register_device_tools(mcp: FastMCP) -> None:
 
         Returns:
             Objekt mit 'data' (Geräteliste), 'totalItems', 'totalPages' und 'currentPage'.
-            Wichtige Felder je Gerät: id, displayName, hostName, primaryIP,
-            operatingSystem, lastSeen, logicalGroup, clientAgentState, registeredUser.
         """
         path = ENDPOINT_TYPES.get(type.lower(), ENDPOINT_TYPES["windows"])
         async with BaramundiClient() as client:
