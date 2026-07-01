@@ -3,12 +3,13 @@ from mcp.server.fastmcp import FastMCP
 from baramundi_mcp.tools.devices import register_device_tools
 from baramundi_mcp.tools.jobs import register_job_tools
 from baramundi_mcp.tools.reports import register_report_tools
+from baramundi_mcp.tools.updates import register_update_tools
 
 mcp = FastMCP(
     name="baramundi-mcp",
     instructions=(
         "Du hast Zugang zum baramundi Management Center (bMC) — einem IT-Management-System "
-        "für Windows-, Mac- und Linux-Geräte in einem Unternehmensnetzwerk.\n\n"
+        "für Windows-, Mac-, Linux- und iOS-Geräte in einem Unternehmensnetzwerk.\n\n"
         "SUCHREGELN — strikte Reihenfolge:\n"
         "1. Hostname oder GUID bekannt → get_device (ein einziger API-Call, sofort fertig).\n"
         "2. Suche nach Name, Benutzer, IP, Gruppe → search_devices (ein einziger API-Call, "
@@ -22,8 +23,10 @@ mcp = FastMCP(
         "- 'PCSWIT1984' → get_device(device_id='PCSWIT1984')\n\n"
         "Fähigkeiten:\n"
         "- Geräte abfragen: get_device, search_devices (bevorzugt), list_devices (Übersicht)\n"
+        "  Gerätetypen: 'windows' (Standard), 'mac', 'linux', 'ios'\n"
         "- Jobs und Software-Deployments: search_job_definitions, start_job (mit dry_run)\n"
-        "- Reports: OS-Verteilung, inaktive Geräte, Agent-Health, fehlgeschlagene Jobs\n\n"
+        "- Reports: OS-Verteilung, inaktive Geräte, Agent-Health, fehlgeschlagene Jobs\n"
+        "- Windows Updates: get_device_update_status (Gerät), report_update_compliance (alle Geräte)\n\n"
         "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung."
     ),
 )
@@ -31,6 +34,7 @@ mcp = FastMCP(
 register_device_tools(mcp)
 register_job_tools(mcp)
 register_report_tools(mcp)
+register_update_tools(mcp)
 
 
 def main() -> None:

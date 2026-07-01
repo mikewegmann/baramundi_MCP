@@ -7,6 +7,7 @@ ENDPOINT_TYPES = {
     "windows": "endpoints/v2.0/WindowsEndpoints",
     "mac":     "endpoints/v2.0/MacEndpoints",
     "linux":   "endpoints/v2.0/LinuxEndpoints",
+    "ios":     "endpoints/v2.0/IosEndpoints",
 }
 
 async def _fetch_all(client: BaramundiClient, path: str) -> list[dict]:
