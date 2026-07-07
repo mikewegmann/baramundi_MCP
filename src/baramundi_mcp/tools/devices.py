@@ -1,5 +1,6 @@
 import re
 import asyncio
+import os
 from mcp.server.fastmcp import FastMCP
 from baramundi_mcp.client import BaramundiClient
 
@@ -81,19 +82,26 @@ def register_device_tools(mcp: FastMCP) -> None:
         """
         Ruft alle Details zu einem einzelnen Gerät ab.
         Akzeptiert sowohl eine GUID als auch einen Hostnamen (z.B. 'PCSWIT1984').
+        Enthält automatisch macmon NAC-Infos (VLAN, Sperrstatus), falls macmon konfiguriert ist.
 
         Args:
             device_id: GUID des Geräts (aus list_devices) ODER Hostname (z.B. 'PCSWIT1984').
 
         Returns:
             Vollständiges Geräte-Objekt mit allen Feldern inkl. Hardware,
-            OS-Version, letzter Benutzer, Gruppe, Agent-Status, etc.
+            OS-Version, letzter Benutzer, Gruppe, Agent-Status und macmon NAC-Status.
         """
         async with BaramundiClient() as client:
             guid = await _resolve_to_guid(client, device_id)
             if guid is None:
                 return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
-            return await client.get(f"endpoints/v2.0/Endpoints/{guid}")
+            device = await client.get(f"endpoints/v2.0/Endpoints/{guid}")
+
+        # macmon NAC-Infos anreichern (nur wenn macmon konfiguriert)
+        if os.environ.get("MACMON_API_URL") and device.get("primaryMAC"):
+            device["macmon"] = await _fetch_macmon_status(device["primaryMAC"])
+
+        return device
 
     @mcp.tool()
     async def get_software_inventory(
@@ -173,6 +181,62 @@ def register_device_tools(mcp: FastMCP) -> None:
                     matches.append(d)
 
         return {"data": _slim_devices(matches[:limit]), "total": len(matches)}
+
+
+async def _fetch_macmon_status(mac_raw: str) -> dict:
+    """Holt VLAN- und NAC-Status aus macmon für eine MAC-Adresse. Gibt {} bei Fehler zurück."""
+    from baramundi_mcp.macmon_client import MacmonClient, MacmonAPIError
+    from baramundi_mcp.tools.macmon import _normalize_mac
+
+    try:
+        mac = _normalize_mac(mac_raw)
+    except ValueError:
+        return {"error": f"Ungültige MAC-Adresse: {mac_raw}"}
+
+    try:
+        async with MacmonClient() as macmon:
+            result = await macmon.get(f"api/v1.2/endpoints/{mac}")
+
+            group_id = result.get("endpointGroupId")
+            group_detail = {}
+            if group_id:
+                try:
+                    group_detail = await macmon.get(f"api/v1.2/endpointgroups/{group_id}")
+                except MacmonAPIError:
+                    pass
+
+    except MacmonAPIError as e:
+        if e.status_code == 404:
+            return {"known": False}
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+    active_vlans = []
+    for session in (result.get("networkSessions") or []):
+        if session.get("active") is not False:
+            active_vlans.extend(session.get("macVlans") or [])
+    active_vlans = sorted(set(active_vlans))
+
+    group_vlans = {}
+    if group_detail:
+        for level in ("Low", "Medium", "High"):
+            vlans = group_detail.get(f"authorizedVlans{level}") or []
+            if vlans:
+                group_vlans[level.lower()] = vlans
+
+    return {
+        "known": True,
+        "blocked": not result.get("active", True),
+        "authorizedVlans": result.get("authorizedVlans") or [],
+        "activeVlans": active_vlans,
+        "endpointGroup": {
+            "id": group_id,
+            "name": group_detail.get("name") if group_detail else None,
+            "vlans": group_vlans or None,
+        },
+        "type": result.get("type"),
+    }
 
 
 def _slim_devices(devices: list[dict]) -> list[dict]:
