@@ -31,7 +31,7 @@ mcp = FastMCP(
         "- Windows Updates: get_device_update_status (Gerät), report_update_compliance (alle Geräte)\n"
         "- macmon NAC: get_vlan_status (VLAN und Sperrstatus per Hostname oder MAC)\n"
         "- Compliance: list_compliance_rules, report_compliance_overview, get_device_compliance, "
-        "check_software_compliance, search_vulnerabilities\n\n"
+        "check_software_compliance, get_device_vulnerabilities, search_vulnerabilities\n\n"
         "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung."
     ),
 )

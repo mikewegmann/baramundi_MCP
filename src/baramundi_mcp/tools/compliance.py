@@ -164,6 +164,69 @@ def register_compliance_tools(mcp: FastMCP) -> None:
         }
 
     @mcp.tool()
+    async def get_device_vulnerabilities(
+        device_id: str,
+        include_ignored: bool = False,
+    ) -> dict:
+        """
+        Gibt alle bekannten CVE-Schwachstellen eines Windows-Geräts zurück.
+        Akzeptiert Hostname (z.B. 'PCSWIT1984') oder GUID.
+
+        Args:
+            device_id: Hostname oder GUID des Geräts.
+            include_ignored: True = auch ignorierte Schwachstellen anzeigen (Standard: False).
+
+        Returns:
+            Objekt mit 'total', 'ignored' (Anzahl ignoriert) und 'vulnerabilities'
+            (cveId, detected, ignored, sowie Details aus der CVE-Datenbank).
+        """
+        async with BaramundiClient() as client:
+            guid = await _resolve_to_guid(client, device_id)
+            if guid is None:
+                return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
+            detected = await _fetch_all(
+                client,
+                f"compliance/v2.0/WindowsEndpoints/{guid}/DetectedVulnerabilities",
+            )
+            # CVE-Details aus der Vulnerability-Datenbank nachladen
+            vuln_ids = [v["vulnerabilityId"] for v in detected if v.get("vulnerabilityId")]
+            vuln_details: dict[str, dict] = {}
+            for v in detected:
+                vid = v.get("vulnerabilityId")
+                if vid:
+                    try:
+                        detail = await client.get(f"compliance/v2.0/Vulnerabilities/{vid}")
+                        vuln_details[vid] = detail
+                    except Exception:
+                        pass
+
+        if not include_ignored:
+            detected = [v for v in detected if not v.get("ignored")]
+
+        result = []
+        for v in detected:
+            detail = vuln_details.get(v.get("vulnerabilityId"), {})
+            result.append({
+                "cveId": v.get("cveId"),
+                "detected": v.get("detected"),
+                "ignored": v.get("ignored"),
+                "severity": detail.get("severity"),
+                "cvssScore": detail.get("cvssScore"),
+                "description": (detail.get("description") or "")[:200],
+                "affectedProducts": detail.get("affectedProducts"),
+            })
+
+        result.sort(key=lambda x: (x.get("cvssScore") or 0), reverse=True)
+        ignored_count = sum(1 for v in detected if v.get("ignored"))
+
+        return {
+            "device": device_id,
+            "total": len(result),
+            "ignoredCount": ignored_count,
+            "vulnerabilities": result,
+        }
+
+    @mcp.tool()
     async def search_vulnerabilities(
         severity: str = "",
         query: str = "",
