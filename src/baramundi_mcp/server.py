@@ -5,6 +5,7 @@ from baramundi_mcp.tools.jobs import register_job_tools
 from baramundi_mcp.tools.reports import register_report_tools
 from baramundi_mcp.tools.updates import register_update_tools
 from baramundi_mcp.tools.macmon import register_macmon_tools
+from baramundi_mcp.tools.compliance import register_compliance_tools
 
 mcp = FastMCP(
     name="baramundi-mcp",
@@ -28,7 +29,9 @@ mcp = FastMCP(
         "- Jobs und Software-Deployments: search_job_definitions, start_job (mit dry_run)\n"
         "- Reports: OS-Verteilung, inaktive Geräte, Agent-Health, fehlgeschlagene Jobs\n"
         "- Windows Updates: get_device_update_status (Gerät), report_update_compliance (alle Geräte)\n"
-        "- macmon NAC: get_vlan_status (VLAN und Sperrstatus per Hostname oder MAC)\n\n"
+        "- macmon NAC: get_vlan_status (VLAN und Sperrstatus per Hostname oder MAC)\n"
+        "- Compliance: list_compliance_rules, report_compliance_overview, get_device_compliance, "
+        "check_software_compliance, search_vulnerabilities\n\n"
         "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung."
     ),
 )
@@ -38,6 +41,7 @@ register_job_tools(mcp)
 register_report_tools(mcp)
 register_update_tools(mcp)
 register_macmon_tools(mcp)
+register_compliance_tools(mcp)
 
 
 def main() -> None:
