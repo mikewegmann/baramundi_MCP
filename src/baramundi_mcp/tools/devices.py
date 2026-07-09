@@ -82,14 +82,15 @@ def register_device_tools(mcp: FastMCP) -> None:
         """
         Ruft alle Details zu einem einzelnen Gerät ab.
         Akzeptiert sowohl eine GUID als auch einen Hostnamen (z.B. 'PCSWIT1984').
-        Enthält automatisch macmon NAC-Infos (VLAN, Sperrstatus), falls macmon konfiguriert ist.
+        Enthält automatisch macmon NAC-Infos (VLAN, Sperrstatus) und Active-Directory-Status,
+        falls die jeweiligen Systeme konfiguriert sind.
 
         Args:
             device_id: GUID des Geräts (aus list_devices) ODER Hostname (z.B. 'PCSWIT1984').
 
         Returns:
             Vollständiges Geräte-Objekt mit allen Feldern inkl. Hardware,
-            OS-Version, letzter Benutzer, Gruppe, Agent-Status und macmon NAC-Status.
+            OS-Version, letzter Benutzer, Gruppe, Agent-Status, macmon NAC-Status und AD-Status.
         """
         async with BaramundiClient() as client:
             guid = await _resolve_to_guid(client, device_id)
@@ -100,6 +101,10 @@ def register_device_tools(mcp: FastMCP) -> None:
         # macmon NAC-Infos anreichern (nur wenn macmon konfiguriert)
         if os.environ.get("MACMON_API_URL") and device.get("primaryMAC"):
             device["macmon"] = await _fetch_macmon_status(device["primaryMAC"])
+
+        # AD-Status anreichern (nur wenn AD konfiguriert)
+        if os.environ.get("AD_SERVER") and device.get("hostName"):
+            device["activeDirectory"] = await _fetch_ad_status(device["hostName"])
 
         return device
 
@@ -236,6 +241,29 @@ async def _fetch_macmon_status(mac_raw: str) -> dict:
             "vlans": group_vlans or None,
         },
         "type": result.get("type"),
+    }
+
+
+async def _fetch_ad_status(hostname: str) -> dict:
+    """Holt den AD-Kontostatus für einen Hostnamen. Gibt {} bei Fehler zurück."""
+    from baramundi_mcp.ad_client import ADClient, ADError
+    try:
+        client = ADClient()
+        result = client.get_computer(hostname)
+    except ADError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+    if result is None:
+        return {"found": False}
+
+    return {
+        "found": True,
+        "enabled": result.get("enabled"),
+        "distinguishedName": result.get("distinguishedName"),
+        "whenCreated": result.get("whenCreated"),
+        "lastLogonTimestamp": result.get("lastLogonTimestamp"),
     }
 
 
