@@ -1,5 +1,32 @@
 import os
+import datetime
 import ldap3
+
+# Windows FILETIME epoch offset (100-ns intervals between 1601-01-01 and 1970-01-01)
+_FILETIME_EPOCH_OFFSET = 116_444_736_000_000_000
+
+
+def _parse_ldap_date(value) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    s = str(value)
+    try:
+        # Generalized Time: YYYYMMDDHHMMSS.0Z
+        return datetime.datetime.strptime(s[:14], "%Y%m%d%H%M%S").strftime("%Y-%m-%d")
+    except Exception:
+        return s
+
+
+def _filetime_to_iso(ft: int) -> str | None:
+    if not ft:
+        return None
+    try:
+        ts = (ft - _FILETIME_EPOCH_OFFSET) / 10_000_000
+        return datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
+    except Exception:
+        return None
 
 
 class ADError(Exception):
@@ -71,7 +98,8 @@ class ADClient:
                 except Exception:
                     return None
 
-            last_logon = val("lastLogonTimestamp")
+            last_logon_raw = val("lastLogonTimestamp")
+            when_created = val("whenCreated")
 
             return {
                 "hostname": hostname.upper(),
@@ -81,8 +109,8 @@ class ADClient:
                 "operatingSystem": val("operatingSystem"),
                 "operatingSystemVersion": val("operatingSystemVersion"),
                 "description": val("description"),
-                "whenCreated": str(val("whenCreated") or ""),
-                "lastLogonTimestamp": str(last_logon) if last_logon else None,
+                "whenCreated": _parse_ldap_date(when_created),
+                "lastLogonTimestamp": _filetime_to_iso(int(last_logon_raw)) if last_logon_raw else None,
             }
         finally:
             conn.unbind()
