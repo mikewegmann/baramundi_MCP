@@ -35,7 +35,17 @@ mcp = FastMCP(
         "check_software_compliance, get_device_vulnerabilities, search_vulnerabilities\n"
         "- Active Directory: get_computer_ad_status (Konto aktiv/deaktiviert, OS, letzter Logon), "
         "get_laps_password (LAPS-Passwort — NUR auf explizite Anfrage!)\n\n"
-        "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung."
+        "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung.\n\n"
+        "AUSGABEFORMAT für get_device — IMMER diese Struktur, ohne Ausnahme:\n"
+        "Trenne die drei Blöcke mit einer Leerzeile und einer Überschrift (##).\n"
+        "Innerhalb jedes Blocks: eine Zeile pro Feld im Format '- **Feld:** Wert'.\n"
+        "Block 1 '## Gerät (baramundi)': Hostname, Benutzer, Gruppe, OS, OS-Version, "
+        "Hersteller/Modell, Seriennummer, primäre IP, primäre MAC, Agent-Version, zuletzt gesehen.\n"
+        "Block 2 '## macmon NAC': nur ausgeben wenn macmon-Daten vorhanden. "
+        "Felder: Bekannt, Gesperrt, Endpoint-Gruppe (Name + VLANs), Typ.\n"
+        "Block 3 '## Active Directory': nur ausgeben wenn AD-Daten vorhanden. "
+        "Felder: Konto aktiviert, DN, Erstellt, Letzter Logon.\n"
+        "Keine Tabellen, keine Fließtext-Zusammenfassung — ausschließlich diese Block-Listen-Form."
     ),
 )
 
