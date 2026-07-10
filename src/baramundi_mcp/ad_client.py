@@ -114,3 +114,81 @@ class ADClient:
             }
         finally:
             conn.unbind()
+
+    def get_laps_password(self, hostname: str) -> dict | None:
+        """
+        Liest das LAPS-Passwort eines Computerkontos aus AD.
+        Unterstützt Legacy LAPS (ms-Mcs-AdmPwd) und Windows LAPS (msLAPS-Password).
+        Gibt None zurück wenn das Konto nicht gefunden wurde.
+        Gibt ein leeres dict zurück wenn kein LAPS-Attribut vorhanden ist.
+        """
+        sam = hostname.upper().rstrip("$") + "$"
+        search_filter = f"(&(objectClass=computer)(sAMAccountName={ldap3.utils.conv.escape_filter_chars(sam)}))"
+        attributes = [
+            "sAMAccountName",
+            "ms-Mcs-AdmPwd",
+            "ms-Mcs-AdmPwdExpirationTime",
+            "msLAPS-Password",
+            "msLAPS-PasswordExpirationTime",
+        ]
+
+        conn = ldap3.Connection(
+            self._server,
+            user=self._bind_dn,
+            password=self._bind_password,
+            authentication=ldap3.SIMPLE,
+            auto_bind=False,
+        )
+        try:
+            if not conn.bind():
+                raise ADError(f"AD-Bind fehlgeschlagen: {conn.result}")
+
+            conn.search(
+                search_base=self._base_dn,
+                search_filter=search_filter,
+                search_scope=ldap3.SUBTREE,
+                attributes=attributes,
+            )
+
+            if not conn.entries:
+                return None
+
+            entry = conn.entries[0]
+
+            def val(attr):
+                try:
+                    v = entry[attr].value
+                    return v if v else None
+                except Exception:
+                    return None
+
+            # Legacy LAPS
+            legacy_pwd = val("ms-Mcs-AdmPwd")
+            legacy_exp_raw = val("ms-Mcs-AdmPwdExpirationTime")
+
+            # Windows LAPS (JSON: {"n":"Administrator","t":"...","p":"password"})
+            win_laps_raw = val("msLAPS-Password")
+            win_laps_exp_raw = val("msLAPS-PasswordExpirationTime")
+
+            result = {"hostname": hostname.upper(), "lapsVersion": None}
+
+            if legacy_pwd:
+                result["lapsVersion"] = "legacy"
+                result["password"] = legacy_pwd
+                result["account"] = "Administrator"
+                result["expiresAt"] = _filetime_to_iso(int(legacy_exp_raw)) if legacy_exp_raw else None
+            elif win_laps_raw:
+                import json as _json
+                result["lapsVersion"] = "windows"
+                try:
+                    laps_data = _json.loads(win_laps_raw)
+                    result["password"] = laps_data.get("p")
+                    result["account"] = laps_data.get("n", "Administrator")
+                except Exception:
+                    result["password"] = win_laps_raw
+                    result["account"] = "Administrator"
+                result["expiresAt"] = _filetime_to_iso(int(win_laps_exp_raw)) if win_laps_exp_raw else None
+            # Kein LAPS konfiguriert oder Berechtigungen fehlen
+            return result
+        finally:
+            conn.unbind()
