@@ -115,60 +115,6 @@ class ADClient:
         finally:
             conn.unbind()
 
-    def set_computer_enabled(self, hostname: str, enabled: bool) -> dict:
-        """
-        Aktiviert oder deaktiviert ein Computerkonto per userAccountControl.
-        Gibt dict mit 'success', 'hostname', 'enabled' und 'dn' zurück.
-        Wirft ADError bei Verbindungs- oder Berechtigungsfehlern.
-        """
-        sam = hostname.upper().rstrip("$") + "$"
-        search_filter = f"(&(objectClass=computer)(sAMAccountName={ldap3.utils.conv.escape_filter_chars(sam)}))"
-
-        conn = ldap3.Connection(
-            self._server,
-            user=self._bind_dn,
-            password=self._bind_password,
-            authentication=ldap3.SIMPLE,
-            auto_bind=False,
-        )
-        try:
-            if not conn.bind():
-                raise ADError(f"AD-Bind fehlgeschlagen: {conn.result}")
-
-            conn.search(
-                search_base=self._base_dn,
-                search_filter=search_filter,
-                search_scope=ldap3.SUBTREE,
-                attributes=["userAccountControl", "distinguishedName"],
-            )
-
-            if not conn.entries:
-                raise ADError(f"Kein Computerkonto '{hostname}' in AD gefunden.")
-
-            entry = conn.entries[0]
-            dn = str(entry.distinguishedName.value)
-            uac = int(entry.userAccountControl.value or 0)
-
-            if enabled:
-                new_uac = uac & ~0x0002  # ACCOUNTDISABLE-Bit löschen
-            else:
-                new_uac = uac | 0x0002   # ACCOUNTDISABLE-Bit setzen
-
-            conn.modify(dn, {"userAccountControl": [(ldap3.MODIFY_REPLACE, [new_uac])]})
-
-            if not conn.result["result"] == 0:
-                raise ADError(f"Änderung fehlgeschlagen: {conn.result['description']} — {conn.result.get('message', '')}")
-
-            return {
-                "success": True,
-                "hostname": hostname.upper(),
-                "dn": dn,
-                "enabled": enabled,
-                "userAccountControl": new_uac,
-            }
-        finally:
-            conn.unbind()
-
     def get_laps_password(self, hostname: str) -> dict | None:
         """
         Liest das LAPS-Passwort eines Computerkontos aus AD.
