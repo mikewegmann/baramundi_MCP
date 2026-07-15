@@ -34,6 +34,7 @@ mcp = FastMCP(
         "- Compliance: list_compliance_rules, report_compliance_overview, get_device_compliance, "
         "check_software_compliance, get_device_vulnerabilities, search_vulnerabilities\n"
         "- Active Directory: get_computer_ad_status (Konto aktiv/deaktiviert, OS, letzter Logon), "
+        "set_computer_ad_enabled (Konto aktivieren/deaktivieren, dry_run=True Standard), "
         "get_laps_password (LAPS-Passwort — NUR auf explizite Anfrage!)\n\n"
         "Schreibende Aktionen (start_job mit dry_run=False) nur nach expliziter Bestätigung.\n\n"
         "AUSGABEFORMAT für get_device — IMMER diese Struktur, ohne Ausnahme:\n"
