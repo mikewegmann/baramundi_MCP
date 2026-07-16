@@ -97,6 +97,13 @@ def register_device_tools(mcp: FastMCP) -> None:
             if guid is None:
                 return {"error": f"Kein Gerät mit Hostname '{device_id}' gefunden."}
             device = await client.get(f"endpoints/v2.0/Endpoints/{guid}")
+            # lastBoot is only available on the Windows-specific endpoint
+            if device.get("type") == "WindowsEndpoint":
+                try:
+                    win = await client.get(f"endpoints/v2.0/WindowsEndpoints/{guid}")
+                    device["lastBoot"] = win.get("lastBoot")
+                except Exception:
+                    pass
 
         # macmon NAC-Infos anreichern (nur wenn macmon konfiguriert)
         if os.environ.get("MACMON_API_URL") and device.get("primaryMAC"):

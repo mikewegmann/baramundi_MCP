@@ -40,7 +40,7 @@ mcp = FastMCP(
         "Trenne die drei Blöcke mit einer Leerzeile und einer Überschrift (##).\n"
         "Innerhalb jedes Blocks: eine Zeile pro Feld im Format '- **Feld:** Wert'.\n"
         "Block 1 '## Gerät (baramundi)': Hostname, Benutzer, Gruppe, OS, OS-Version, "
-        "Hersteller/Modell, Seriennummer, primäre IP, primäre MAC, Agent-Version, zuletzt gesehen.\n"
+        "Hersteller/Modell, Seriennummer, primäre IP, primäre MAC, Agent-Version, zuletzt gesehen, letzter Boot.\n"
         "Block 2 '## macmon NAC': nur ausgeben wenn macmon-Daten vorhanden. "
         "Felder: Bekannt, Gesperrt, Endpoint-Gruppe (Name + VLANs), Typ.\n"
         "Block 3 '## Active Directory': nur ausgeben wenn AD-Daten vorhanden. "
